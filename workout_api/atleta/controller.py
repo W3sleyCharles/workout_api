@@ -13,19 +13,22 @@ from sqlalchemy.future import select
 
 router = APIRouter()
 
+# Endpoint para criar um novo atleta
 @router.post(
     '/', 
     summary='Criar um novo atleta',
     status_code=status.HTTP_201_CREATED,
     response_model=AtletaOut
 )
-async def post(
+async def criar_atleta(
     db_session: DatabaseDependency, 
     atleta_in: AtletaIn = Body(...)
 ):
+    # Extrai o nome da categoria e do centro de treinamento do corpo da requisição
     categoria_nome = atleta_in.categoria.nome
     centro_treinamento_nome = atleta_in.centro_treinamento.nome
 
+    # Busca a categoria pelo nome
     categoria = (await db_session.execute(
         select(CategoriaModel).filter_by(nome=categoria_nome))
     ).scalars().first()
@@ -36,6 +39,7 @@ async def post(
             detail=f'A categoria {categoria_nome} não foi encontrada.'
         )
     
+    # Busca o centro de treinamento pelo nome
     centro_treinamento = (await db_session.execute(
         select(CentroTreinamentoModel).filter_by(nome=centro_treinamento_nome))
     ).scalars().first()
@@ -45,13 +49,18 @@ async def post(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail=f'O centro de treinamento {centro_treinamento_nome} não foi encontrado.'
         )
+    
     try:
+        # Cria uma nova instância de AtletaOut com um UUID e a data atual
         atleta_out = AtletaOut(id=uuid4(), created_at=datetime.utcnow(), **atleta_in.model_dump())
+        # Cria uma instância de AtletaModel a partir dos dados de AtletaOut
         atleta_model = AtletaModel(**atleta_out.model_dump(exclude={'categoria', 'centro_treinamento'}))
 
+        # Define os IDs da categoria e do centro de treinamento no modelo de atleta
         atleta_model.categoria_id = categoria.pk_id
         atleta_model.centro_treinamento_id = centro_treinamento.pk_id
         
+        # Adiciona o atleta ao banco de dados e commita a transação
         db_session.add(atleta_model)
         await db_session.commit()
     except Exception:
@@ -62,26 +71,28 @@ async def post(
 
     return atleta_out
 
-
+# Endpoint para consultar todos os atletas
 @router.get(
     '/', 
     summary='Consultar todos os Atletas',
     status_code=status.HTTP_200_OK,
     response_model=list[AtletaOut],
 )
-async def query(db_session: DatabaseDependency) -> list[AtletaOut]:
+async def consultar_atletas(db_session: DatabaseDependency) -> list[AtletaOut]:
+    # Busca todos os atletas no banco de dados e retorna como lista de AtletaOut
     atletas: list[AtletaOut] = (await db_session.execute(select(AtletaModel))).scalars().all()
     
     return [AtletaOut.model_validate(atleta) for atleta in atletas]
 
-
+# Endpoint para consultar um atleta pelo ID
 @router.get(
     '/{id}', 
     summary='Consulta um Atleta pelo id',
     status_code=status.HTTP_200_OK,
     response_model=AtletaOut,
 )
-async def get(id: UUID4, db_session: DatabaseDependency) -> AtletaOut:
+async def consultar_atleta_por_id(id: UUID4, db_session: DatabaseDependency) -> AtletaOut:
+    # Busca um atleta pelo ID no banco de dados e retorna como AtletaOut
     atleta: AtletaOut = (
         await db_session.execute(select(AtletaModel).filter_by(id=id))
     ).scalars().first()
@@ -94,14 +105,15 @@ async def get(id: UUID4, db_session: DatabaseDependency) -> AtletaOut:
     
     return atleta
 
-
+# Endpoint para editar um atleta pelo ID
 @router.patch(
     '/{id}', 
     summary='Editar um Atleta pelo id',
     status_code=status.HTTP_200_OK,
     response_model=AtletaOut,
 )
-async def patch(id: UUID4, db_session: DatabaseDependency, atleta_up: AtletaUpdate = Body(...)) -> AtletaOut:
+async def editar_atleta(id: UUID4, db_session: DatabaseDependency, atleta_up: AtletaUpdate = Body(...)) -> AtletaOut:
+    # Busca um atleta pelo ID no banco de dados
     atleta: AtletaOut = (
         await db_session.execute(select(AtletaModel).filter_by(id=id))
     ).scalars().first()
@@ -112,6 +124,7 @@ async def patch(id: UUID4, db_session: DatabaseDependency, atleta_up: AtletaUpda
             detail=f'Atleta não encontrado no id: {id}'
         )
     
+    # Atualiza os campos do atleta com os novos valores
     atleta_update = atleta_up.model_dump(exclude_unset=True)
     for key, value in atleta_update.items():
         setattr(atleta, key, value)
@@ -121,13 +134,14 @@ async def patch(id: UUID4, db_session: DatabaseDependency, atleta_up: AtletaUpda
 
     return atleta
 
-
+# Endpoint para deletar um atleta pelo ID
 @router.delete(
     '/{id}', 
     summary='Deletar um Atleta pelo id',
     status_code=status.HTTP_204_NO_CONTENT
 )
-async def delete(id: UUID4, db_session: DatabaseDependency) -> None:
+async def deletar_atleta(id: UUID4, db_session: DatabaseDependency) -> None:
+    # Busca um atleta pelo ID no banco de dados e deleta
     atleta: AtletaOut = (
         await db_session.execute(select(AtletaModel).filter_by(id=id))
     ).scalars().first()
